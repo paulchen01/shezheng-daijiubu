@@ -1,5 +1,5 @@
 // Build replaces the token with a digest of every release asset.
-const CACHE_NAME = "shezheng-daijiubu-fff2fcb0f95fc170";
+const CACHE_NAME = "shezheng-daijiubu-1a1d3cb937e67aa3";
 const APP_SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./app-core.mjs", "./pwa.js", "./backup.mjs", "./manifest.webmanifest", "./data/review-data.json", "./icons/apple-touch-icon.png", "./icons/favicon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable.png"];
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL.map(url => new Request(url, { cache: "reload" })))));
