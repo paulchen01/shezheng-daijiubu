@@ -5,7 +5,8 @@
   if (!screen || !shell) return;
   const startedAt = performance.now();
   const picture = screen.querySelector("img");
-  let imageShownAt = picture.complete && picture.naturalWidth ? startedAt : null;
+  // `complete` also covers a cached image failure that happened before this deferred script ran.
+  let imageShownAt = picture.complete ? startedAt : null;
   let finished = false;
   let minimumTimer;
   performance.mark("startup-visible");
@@ -16,7 +17,6 @@
     clearTimeout(minimumTimer);
     clearTimeout(maximumTimer);
     document.removeEventListener("app-ready", checkReady);
-    document.removeEventListener("pwa-ready", checkReady);
     shell.removeAttribute("inert");
     shell.removeAttribute("aria-hidden");
     screen.remove();
@@ -28,17 +28,18 @@
   function checkReady() {
     if (finished) return;
     const state = document.documentElement.dataset;
-    if (state.appReady !== "true" || state.pwaReady !== "true" || imageShownAt === null) return;
-    // Normally show for 2s, including at least 1s with the image decoded.
-    const remaining = Math.max(startedAt + 2000, imageShownAt + 1000) - performance.now();
+    if (state.appReady !== "true" || imageShownAt === null) return;
+    // The first screen is independent of the offline cache and full question bank.
+    // Keep the artwork visible briefly, then reveal the usable home screen.
+    const remaining = Math.max(startedAt + 1200, imageShownAt + 800) - performance.now();
     clearTimeout(minimumTimer);
     if (remaining > 0) minimumTimer = setTimeout(checkReady, remaining);
     else finish();
   }
 
   picture.addEventListener("load", () => { imageShownAt = performance.now(); checkReady(); }, { once: true });
+  picture.addEventListener("error", () => { imageShownAt = performance.now(); checkReady(); }, { once: true });
   document.addEventListener("app-ready", checkReady);
-  document.addEventListener("pwa-ready", checkReady);
   // Slow/offline first loads must never remain behind the splash indefinitely.
   const maximumTimer = setTimeout(finish, 3000);
   checkReady();

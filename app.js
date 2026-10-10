@@ -2,10 +2,9 @@ import {
   buildProgressAfterAttempt,
   createPracticeSet,
   evaluateAnswer,
-  getChapterQuestionCounts,
   getProgressSummary
 } from "./app-core.mjs";
-import { initPwa, renderAbout, handlePwaAction, reportQuestion, showStorageWarning } from "./pwa.js";
+import { initPwa, markQuestionDataReady, renderAbout, handlePwaAction, reportQuestion, showStorageWarning } from "./pwa.js";
 
 const PROGRESS_KEY = "shezhengDaijiubuProgressV1";
 const FAVORITES_KEY = "shezhengDaijiubuFavoritesV1";
@@ -14,6 +13,9 @@ const app = document.querySelector("#app");
 const nav = document.querySelector(".bottom-nav");
 const state = {
   data: null,
+  catalog: null,
+  dataPromise: null,
+  dataError: null,
   progress: readJson(PROGRESS_KEY, {}),
   favorites: new Set(Array.isArray(readJson(FAVORITES_KEY, [])) ? readJson(FAVORITES_KEY, []) : []),
   session: null,
@@ -44,7 +46,7 @@ function escapeHtml(value) {
 }
 
 function questionById(id) {
-  return state.data.questions.find((question) => question.id === id);
+  return state.data?.questions.find((question) => question.id === id);
 }
 
 function labelForAnswer(question) {
@@ -75,12 +77,13 @@ function setActiveNav(view) {
 
 function renderHome() {
   const summary = getProgressSummary(state.progress);
-  const chapterCounts = getChapterQuestionCounts(state.data.questions, state.data.filters.chapters.map((chapter) => chapter.id));
+  const catalog = state.catalog;
+  const chapterCounts = catalog.chapterQuestionCounts;
   const hasSession = state.session && !state.session.completed;
   setActiveNav("home");
   app.innerHTML = `
     <section class="hero-card">
-      <p class="eyebrow">公開測試・${state.data.summary.questions.toLocaleString("zh-TW")}題國考原題</p>
+      <p class="eyebrow">公開測試・${catalog.summary.questions.toLocaleString("zh-TW")}題國考原題</p>
       <h1>從考題，讀懂社會政策</h1>
       <p>依課程章節練習，作答後閱讀詳解、選項差異與延伸理解。</p>
       <button class="primary" data-action="open-range">開始練習</button>
@@ -93,7 +96,7 @@ function renderHome() {
     </section>
     <section class="section-title"><div><p class="eyebrow">CHAPTER PRACTICE</p><h2>依章節練習</h2></div><p>選擇一章，即可抽5題或10題。</p></section>
     <section class="chapter-grid">
-      ${state.data.filters.chapters.map((chapter) => {
+      ${catalog.filters.chapters.map((chapter) => {
         const chapterProgress = state.progress.chapterStats?.[String(chapter.id)];
         const progressLabel = chapterProgress?.attempts ? `已練${chapterProgress.attempts}題・答對率${Math.round((chapterProgress.correct / chapterProgress.attempts) * 100)}%` : "尚未練習";
         return `
@@ -106,10 +109,11 @@ function renderHome() {
 }
 
 function renderSetup(initialChapters = []) {
+  const catalog = state.catalog;
   const selected = new Set(initialChapters.map(Number));
   const singleChapter = selected.size === 1;
-  const selectedChapter = singleChapter ? state.data.filters.chapters.find((chapter) => selected.has(chapter.id)) : null;
-  const chapterOptions = state.data.filters.chapters.map((chapter) => `<option value="${chapter.id}">第${chapter.id}章　${escapeHtml(chapter.title)}</option>`).join("");
+  const selectedChapter = singleChapter ? catalog.filters.chapters.find((chapter) => selected.has(chapter.id)) : null;
+  const chapterOptions = catalog.filters.chapters.map((chapter) => `<option value="${chapter.id}">第${chapter.id}章　${escapeHtml(chapter.title)}</option>`).join("");
   setActiveNav("");
   app.innerHTML = `
     <section class="panel setup-panel">
@@ -120,7 +124,7 @@ function renderSetup(initialChapters = []) {
       ${!singleChapter ? `<fieldset class="range-selector"><legend>從範圍帶入章節</legend><div><label>起始章<select id="range-start">${chapterOptions}</select></label><label>結束章<select id="range-end">${chapterOptions}</select></label></div><button class="text-button" data-action="apply-range">套用連續範圍</button></fieldset>` : ""}
       <details class="setup-details" ${singleChapter ? "" : "open"}><summary>${singleChapter ? "調整題數、答案公布方式或練習章節" : "選擇練習章節"}</summary><div>
       <fieldset><legend>練習章節</legend><div class="chapter-selector">
-      ${state.data.filters.chapters.map((chapter) => `<label><input type="checkbox" name="chapter" value="${chapter.id}" ${selected.has(chapter.id) ? "checked" : ""}><span>第${chapter.id}章　${escapeHtml(chapter.title)}</span></label>`).join("")}
+      ${catalog.filters.chapters.map((chapter) => `<label><input type="checkbox" name="chapter" value="${chapter.id}" ${selected.has(chapter.id) ? "checked" : ""}><span>第${chapter.id}章　${escapeHtml(chapter.title)}</span></label>`).join("")}
       </div></fieldset>
       <fieldset><legend>題數</legend><div class="choice-row">
         <label><input type="radio" name="count" value="5" checked><span>5題</span></label>
@@ -273,7 +277,27 @@ function showSetupError(message, available = null) {
   if (available) error.insertAdjacentHTML("afterend", `<button class="secondary-dark available-count" data-action="start-available" data-count="${available}">改做${available}題</button>`);
 }
 
-function startFromSetup(forcedCount = null) {
+async function ensureQuestionData(trigger = null) {
+  if (state.data) return true;
+  const originalLabel = trigger?.textContent;
+  if (trigger) { trigger.disabled = true; trigger.textContent = "正在準備題目……"; }
+  app.querySelector("#setup-error")?.replaceChildren("題庫正在背景下載，完成後會立即開始。");
+  try {
+    const data = await state.dataPromise;
+    if (!data) throw state.dataError || new Error("請確認網路後重新整理。");
+    return true;
+  } catch (error) {
+    const message = `題庫資料暫時無法載入：${error.message}`;
+    const setupError = app.querySelector("#setup-error");
+    if (setupError) setupError.textContent = message;
+    else app.insertAdjacentHTML("afterbegin", `<p class="form-error" role="alert">${escapeHtml(message)}</p>`);
+    return false;
+  } finally {
+    if (trigger) { trigger.disabled = false; trigger.textContent = originalLabel; }
+  }
+}
+
+async function startFromSetup(forcedCount = null, trigger = null) {
   const chapterIds = [...app.querySelectorAll('input[name="chapter"]:checked')].map((input) => Number(input.value));
   const error = app.querySelector("#setup-error");
   if (!chapterIds.length) {
@@ -290,6 +314,7 @@ function startFromSetup(forcedCount = null) {
     showSetupError("題數必須是正整數。");
     return;
   }
+  if (!await ensureQuestionData(trigger)) return;
   try {
     const picked = createPracticeSet(state.data.questions, chapterIds, count);
     startPractice(picked.map((question) => question.id), { chapterIds, reveal });
@@ -300,7 +325,7 @@ function startFromSetup(forcedCount = null) {
   }
 }
 
-function handleAction(target) {
+async function handleAction(target) {
   const action = target.dataset.action;
   if (!action) return;
   if (handlePwaAction(action, state)) return;
@@ -326,6 +351,7 @@ function handleAction(target) {
   if (action === "quick-start") {
     const chapterIds = state.setupChapterIds;
     const count = Number(target.dataset.count);
+    if (!await ensureQuestionData(target)) return;
     try {
       const picked = createPracticeSet(state.data.questions, chapterIds, count);
       startPractice(picked.map((question) => question.id), { chapterIds, reveal: "immediate" });
@@ -334,8 +360,8 @@ function handleAction(target) {
       showSetupError(exception.message, Number(exception.message.match(/可用題數只有(\d+)題/u)?.[1]));
     }
   }
-  if (action === "start-practice") startFromSetup();
-  if (action === "start-available") startFromSetup(Number(target.dataset.count));
+  if (action === "start-practice") await startFromSetup(null, target);
+  if (action === "start-available") await startFromSetup(Number(target.dataset.count), target);
   if (action === "resume") { location.hash = "quiz"; renderQuestion(); }
   if (action === "keep-current") { state.pendingPractice = null; location.hash = "quiz"; renderQuestion(); }
   if (action === "discard-and-start" && state.pendingPractice) {
@@ -404,6 +430,18 @@ function handleAction(target) {
 
 function route() {
   const view = location.hash.replace("#", "") || "home";
+  if (!state.data && ["quiz", "result", "wrong", "favorite"].includes(view)) {
+    setActiveNav("");
+    app.innerHTML = `<section class="loading-panel"><p>正在準備題庫，完成後會開啟你選擇的頁面……</p></section>`;
+    state.dataPromise?.then((data) => {
+      if (data) route();
+      else {
+        app.innerHTML = `<section class="panel"><h1>題庫資料暫時無法載入</h1><p>${escapeHtml(state.dataError?.message || "請確認網路後重新整理。")}</p><button class="primary" id="reload-page">重新載入</button></section>`;
+        app.querySelector("#reload-page").onclick = () => location.reload();
+      }
+    });
+    return;
+  }
   if (view === "home") renderHome();
   else if (view === "setup") renderSetup(state.setupChapterIds);
   else if (view === "quiz" && state.session && !state.session.completed) renderQuestion();
@@ -411,32 +449,51 @@ function route() {
   else if (view === "result" && state.session) { location.hash = "quiz"; renderQuestion(); }
   else if (view === "wrong") renderSavedList("wrong");
   else if (view === "favorite") renderSavedList("favorite");
-  else if (view === "about") { setActiveNav("about"); renderAbout(app, state.data); }
+  else if (view === "about") { setActiveNav("about"); renderAbout(app, state.catalog); }
   else renderHome();
 }
 
+function restoreCachedSession() {
+  if (!state.progress || typeof state.progress !== "object" || Array.isArray(state.progress)) state.progress = {};
+  const cachedSession = readJson(SESSION_KEY, null);
+  if (Array.isArray(cachedSession?.questionIds) && cachedSession.questionIds.length && cachedSession.questionIds.every(questionById)
+    && Number.isInteger(cachedSession.index) && cachedSession.index >= 0 && cachedSession.index < cachedSession.questionIds.length
+    && cachedSession.answers && typeof cachedSession.answers === "object" && !Array.isArray(cachedSession.answers)
+    && Object.entries(cachedSession.answers).every(([id, key]) => cachedSession.questionIds.includes(id) && /^[ABCD]$/.test(key))) state.session = cachedSession;
+}
+
+async function loadQuestionData() {
+  const response = await fetch("data/review-data.json");
+  if (!response.ok) throw new Error(`資料讀取失敗（${response.status}）`);
+  state.data = await response.json();
+  restoreCachedSession();
+  markQuestionDataReady();
+  if (["quiz", "result", "wrong", "favorite"].includes(location.hash.replace("#", ""))) route();
+  else if (location.hash === "#home" || !location.hash) renderHome();
+  return state.data;
+}
+
 async function boot() {
-  // Prepare offline assets while the launch picture and question data load.
-  initPwa();
+  // The catalogue is small enough for the first screen; the 10 MB question bank follows in background.
+  const pwaReady = initPwa();
   try {
-    const response = await fetch("data/review-data.json");
+    const response = await fetch("data/home-data.json");
     if (!response.ok) throw new Error(`資料讀取失敗（${response.status}）`);
-    state.data = await response.json();
-    if (!state.progress || typeof state.progress !== "object" || Array.isArray(state.progress)) state.progress = {};
-    const cachedSession = readJson(SESSION_KEY, null);
-    if (Array.isArray(cachedSession?.questionIds) && cachedSession.questionIds.length && cachedSession.questionIds.every(questionById)
-      && Number.isInteger(cachedSession.index) && cachedSession.index >= 0 && cachedSession.index < cachedSession.questionIds.length
-      && cachedSession.answers && typeof cachedSession.answers === "object" && !Array.isArray(cachedSession.answers)
-      && Object.entries(cachedSession.answers).every(([id, key]) => cachedSession.questionIds.includes(id) && /^[ABCD]$/.test(key))) state.session = cachedSession;
+    state.catalog = await response.json();
     route();
     window.addEventListener("hashchange", route);
     app.addEventListener("click", (event) => {
       const target = event.target.closest("[data-action]");
-      if (target) handleAction(target);
+      if (target) void handleAction(target);
     });
     document.querySelector(".brand").addEventListener("click", () => { location.hash = "home"; });
     document.documentElement.dataset.appReady = "true";
     document.dispatchEvent(new Event("app-ready"));
+    // Start after the first home paint so it cannot delay the launch image or first interaction.
+    state.dataPromise = new Promise(resolve => setTimeout(resolve, 0)).then(() => pwaReady).then(loadQuestionData).catch((error) => {
+      state.dataError = error;
+      return null;
+    });
   } catch (error) {
     app.innerHTML = `<section class="panel"><h1>題庫資料暫時無法載入</h1><p>${escapeHtml(error.message)}</p><p>第一次使用需要網路。請連線後重新整理；離線使用前，請先等待「已可離線練習」提示。</p><button class="primary" id="reload-page">重新載入</button></section>`;
     app.querySelector("#reload-page").onclick = () => location.reload();

@@ -1,11 +1,12 @@
 import { STORAGE_KEYS, validateBackup } from "./backup.mjs";
-export const RELEASE = "0.2.0-beta.3";
+export const RELEASE = "0.2.0-beta.4";
 const banner = document.querySelector("#pwa-status");
 let registration, installPrompt;
-let offlineReady = false, storageFailed = false, refreshing = false;
+let serviceWorkerReady = false, questionDataReady = false, storageFailed = false, refreshing = false;
+const offlineReady = () => serviceWorkerReady && questionDataReady;
 const escape = value => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 function paintStatus() {
-  banner.innerHTML = `${storageFailed ? '<p>瀏覽器無法儲存紀錄。請到「說明」匯出備份，避免關閉後遺失。</p>' : ""}${registration?.waiting ? '<span>新版已準備好，更新會保留已儲存的作答。</span><button class="text-button" id="apply-update">更新版本</button>' : `<span>${!navigator.onLine ? (offlineReady ? "離線中・可繼續練習" : "離線中・請連線完成首次下載") : offlineReady ? "已可離線練習" : "正在準備離線題庫……"}</span>`}`;
+  banner.innerHTML = `${storageFailed ? '<p>瀏覽器無法儲存紀錄。請到「說明」匯出備份，避免關閉後遺失。</p>' : ""}${registration?.waiting ? '<span>新版已準備好，更新會保留已儲存的作答。</span><button class="text-button" id="apply-update">更新版本</button>' : `<span>${!navigator.onLine ? (offlineReady() ? "離線中・可繼續練習" : "離線中・請連線完成首次下載") : offlineReady() ? "已可離線練習" : "首頁已開啟・正在準備離線題庫……"}</span>`}`;
   banner.querySelector("#apply-update")?.addEventListener("click", () => registration.waiting.postMessage({ type: "SKIP_WAITING" }));
 }
 export function showStorageWarning() { storageFailed = true; paintStatus(); }
@@ -20,7 +21,7 @@ export async function initPwa() {
   if (!("serviceWorker" in navigator)) { banner.textContent = "此瀏覽器可線上練習；離線功能不受支援。"; return; }
   let hadController = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadController) { hadController = true; offlineReady = true; paintStatus(); return; }
+    if (!hadController) { hadController = true; paintStatus(); return; }
     if (refreshing) return; refreshing = true; location.reload();
   });
   try {
@@ -29,14 +30,16 @@ export async function initPwa() {
       const worker = registration.installing;
       worker?.addEventListener("statechange", () => { if (worker.state === "installed") paintStatus(); });
     });
-    await navigator.serviceWorker.ready; offlineReady = true; paintStatus();
+    await navigator.serviceWorker.ready; serviceWorkerReady = true; paintStatus();
     document.documentElement.dataset.pwaReady = "true";
     document.dispatchEvent(new Event("pwa-ready"));
     registration.update().catch(() => {});
   } catch { banner.textContent = "目前可線上練習；離線下載未完成，請連線後重新整理再試。"; }
 }
+export function markQuestionDataReady() { questionDataReady = true; paintStatus(); }
 export function renderAbout(app, data) {
-  app.innerHTML = `<section class="panel about-panel"><p class="eyebrow">PUBLIC BETA · ${RELEASE}</p><h1>把練習帶著走</h1><p>社政待救補是社會政策與社會立法的獨立練習工具。目前有${data.questions.length.toLocaleString("zh-TW")}題國考原題、15章練習範圍。</p>
+  const questionCount = data?.summary?.questions ?? data?.questions?.length ?? 0;
+  app.innerHTML = `<section class="panel about-panel"><p class="eyebrow">PUBLIC BETA · ${RELEASE}</p><h1>把練習帶著走</h1><p>社政待救補是社會政策與社會立法的獨立練習工具。目前有${questionCount.toLocaleString("zh-TW")}題國考原題、15章練習範圍。</p>
   <h2>安裝與離線使用</h2><button class="primary" data-action="install-app">${installPrompt ? "安裝到這台裝置" : "查看安裝方式"}</button><div id="install-help"><p>Android或電腦：用Chrome／Edge開啟，選擇選單中的「安裝應用程式」或「新增至主畫面」。</p><p>iPhone／iPad：用Safari開啟，點「分享」→「加入主畫面」。選單名稱依瀏覽器版本略有不同。</p><p>第一次請保持連線，直到上方顯示「已可離線練習」。之後可離線作答、看詳解與使用錯題本；外部來源連結仍需要網路。瀏覽器若清除網站資料，需再次連線下載。</p></div>
   <h2>你的紀錄</h2><p>交卷後才計入答對率和錯題本；未完成的練習可儲存後繼續。紀錄只存在目前的瀏覽器，不會自動跨裝置同步。換手機、清除網站資料或使用無痕模式前，請先備份。</p><p>備份包含已完成練習的統計、錯題及收藏，不包含尚未交卷的練習。匯入會取代這台裝置的紀錄，請先匯出舊紀錄。</p><div class="utility-actions"><button class="secondary-dark" data-action="export-backup">匯出紀錄</button><button class="secondary-dark" data-action="import-backup">匯入紀錄</button></div><input id="backup-file" type="file" accept=".json,application/json" hidden><p id="backup-message" role="status"></p><button class="text-button" data-action="clear-local">重設這台裝置的紀錄</button>
   <h2>內容與來源</h2><p>國考題幹、選項、官方答案及更正公告保留原資料。詳解、其他選項差異、延伸理解與章節對應是另行整理的教學說明，目前仍在審閱中；請搭配原始來源判讀。</p><p>課程參考：黃源協、蕭文高《社會政策與社會立法》（五版）。本網站不提供課程PDF下載。歷屆法規題的命題時間與今日規定可能不同，練習的計分依該題官方答案。</p>
