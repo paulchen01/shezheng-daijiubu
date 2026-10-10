@@ -1,5 +1,5 @@
 import { STORAGE_KEYS, validateBackup } from "./backup.mjs";
-export const RELEASE = "0.2.0-beta.4";
+export const RELEASE = "0.2.0-beta.5";
 const banner = document.querySelector("#pwa-status");
 let registration, installPrompt;
 let serviceWorkerReady = false, questionDataReady = false, storageFailed = false, refreshing = false;
