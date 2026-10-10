@@ -15,6 +15,13 @@
   --shadow: 0 14px 32px rgba(6, 26, 68, .13);
   color-scheme: light;
 }
+.starting { overflow: hidden; }
+.starting .app-shell { visibility: hidden; }
+.startup-screen { position: fixed; inset: 0; z-index: 100; display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100dvh; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); background: #0788a3; }
+.startup-screen img { width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.startup-screen p { display: flex; justify-content: center; align-items: center; gap: 10px; margin: 0; padding: 10px 16px; color: #fff; font-size: 14px; background: #075968; }
+.startup-spinner { width: 16px; height: 16px; border: 2px solid #ffffff60; border-top-color: #fff; border-radius: 50%; animation: startup-spin .8s linear infinite; }
+@keyframes startup-spin { to { transform: rotate(360deg); } }
 
 * { box-sizing: border-box; }
 html { background: var(--paper); }

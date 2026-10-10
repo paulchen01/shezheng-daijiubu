@@ -1,5 +1,5 @@
 import { STORAGE_KEYS, validateBackup } from "./backup.mjs";
-export const RELEASE = "0.2.0-beta.2";
+export const RELEASE = "0.2.0-beta.3";
 const banner = document.querySelector("#pwa-status");
 let registration, installPrompt;
 let offlineReady = false, storageFailed = false, refreshing = false;
@@ -30,6 +30,8 @@ export async function initPwa() {
       worker?.addEventListener("statechange", () => { if (worker.state === "installed") paintStatus(); });
     });
     await navigator.serviceWorker.ready; offlineReady = true; paintStatus();
+    document.documentElement.dataset.pwaReady = "true";
+    document.dispatchEvent(new Event("pwa-ready"));
     registration.update().catch(() => {});
   } catch { banner.textContent = "目前可線上練習；離線下載未完成，請連線後重新整理再試。"; }
 }

@@ -416,6 +416,8 @@ function route() {
 }
 
 async function boot() {
+  // Prepare offline assets while the launch picture and question data load.
+  initPwa();
   try {
     const response = await fetch("data/review-data.json");
     if (!response.ok) throw new Error(`資料讀取失敗（${response.status}）`);
@@ -433,10 +435,13 @@ async function boot() {
       if (target) handleAction(target);
     });
     document.querySelector(".brand").addEventListener("click", () => { location.hash = "home"; });
-    initPwa();
+    document.documentElement.dataset.appReady = "true";
+    document.dispatchEvent(new Event("app-ready"));
   } catch (error) {
     app.innerHTML = `<section class="panel"><h1>題庫資料暫時無法載入</h1><p>${escapeHtml(error.message)}</p><p>第一次使用需要網路。請連線後重新整理；離線使用前，請先等待「已可離線練習」提示。</p><button class="primary" id="reload-page">重新載入</button></section>`;
     app.querySelector("#reload-page").onclick = () => location.reload();
+    document.documentElement.dataset.appReady = "true";
+    document.dispatchEvent(new Event("app-ready"));
   }
 }
 
