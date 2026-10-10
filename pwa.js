@@ -18,7 +18,9 @@ window.addEventListener("appinstalled", () => { installPrompt = null; });
 export async function initPwa() {
   paintStatus(); window.addEventListener("online", paintStatus); window.addEventListener("offline", paintStatus);
   if (!("serviceWorker" in navigator)) { banner.textContent = "此瀏覽器可線上練習；離線功能不受支援。"; return; }
+  let hadController = Boolean(navigator.serviceWorker.controller);
   navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController) { hadController = true; offlineReady = true; paintStatus(); return; }
     if (refreshing) return; refreshing = true; location.reload();
   });
   try {
