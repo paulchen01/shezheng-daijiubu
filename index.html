@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#061a44">
+    <meta name="description" content="社會政策與社會立法國考題與課程概念練習。">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="社政待救補">
+    <title>社政待救補</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" href="icons/favicon.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <a class="brand" href="#home" aria-label="回到社政待救補首頁">
+          <span class="brand-mark" aria-hidden="true">政</span>
+          <span><strong>社政待救補</strong><small>社會政策與社會立法</small></span>
+        </a>
+        <a class="beta-badge" href="#about">公測版・使用說明</a>
+      </header>
+      <aside id="pwa-status" class="pwa-status" role="status" aria-live="polite"></aside>
+      <main id="app" tabindex="-1" aria-live="polite">
+        <section class="loading-panel"><p>正在載入1,240題學習資料……</p></section>
+      </main>
+      <nav class="bottom-nav" aria-label="主要功能">
+        <a href="#home" data-nav="home">首頁</a>
+        <a href="#wrong" data-nav="wrong">錯題</a>
+        <a href="#favorite" data-nav="favorite">收藏</a>
+        <a href="#about" data-nav="about">說明</a>
+      </nav>
+    </div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "社政待救補｜社會政策與社會立法",
+  "short_name": "社政待救補",
+  "id": "./",
+  "lang": "zh-Hant-TW",
+  "description": "社會政策與社會立法國考題與課程概念練習。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff8e8",
+  "theme_color": "#061a44",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
